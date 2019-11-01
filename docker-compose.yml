@@ -1,0 +1,28 @@
+version: '3'
+services:
+  env:
+    image: golang:1.12
+    environment:
+      - GO111MODULE=on
+      - DATASTORE_EMULATOR_HOST=datastore:8059
+      - DATASTORE_PROJECT_ID=local-app
+      - PORT=8000
+    working_dir: /opt/app
+    volumes:
+      - .:/opt/app
+    ports:
+      - 8000:8000
+    links:
+      - datastore:datastore
+    command: bash -c "go get github.com/pilu/fresh && fresh -c .fresh.conf"
+
+  datastore:
+    image: google/cloud-sdk
+    environment:
+      - PROJECT_ID=local-app
+    command: /bin/bash -c "gcloud beta emulators datastore start --host-port 0.0.0.0:8059 --project $$PROJECT_ID --data-dir /data"
+    volumes:
+      - datastore_volume:/data
+volumes:
+  datastore_volume:
+
