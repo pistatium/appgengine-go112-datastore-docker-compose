@@ -2,13 +2,13 @@ package main
 
 import (
 	"context"
-	"os"
 	"fmt"
-	"time"
 	"log"
 	"net/http"
-	"github.com/gin-gonic/gin"
+	"os"
+	"time"
 
+	"github.com/gin-gonic/gin"
 	"cloud.google.com/go/datastore"
 )
 
@@ -18,7 +18,7 @@ const (
 )
 
 type Entry struct {
-	Title     string    `json:"title"'`
+	Title     string    `json:"title"`
 	Body      string    `json:"body"`
 	CreatedAt time.Time `json:"created_at"`
 }
@@ -33,7 +33,30 @@ func getDatastoreClient(ctx context.Context) (client *datastore.Client, err erro
 	return
 }
 
-func indexHandler(gc *gin.Context) {
+func postEntries(gc *gin.Context) {
+	ctx := context.Background()
+
+	var entry Entry
+	if err := gc.ShouldBindJSON(&entry); err != nil {
+		gc.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	client, err := getDatastoreClient(ctx)
+	if err != nil {
+		gc.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	key := datastore.IncompleteKey("Entry", nil)
+	if _, err := client.Put(ctx, key, &entry); err != nil {
+		gc.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	gc.JSON(http.StatusOK, entry)
+}
+
+func getEntries(gc *gin.Context) {
 	ctx := context.Background()
 
 	client, err := getDatastoreClient(ctx)
@@ -60,7 +83,8 @@ func main() {
 	}
 
 	r := gin.Default()
-	r.GET("/", indexHandler)
+	r.GET("/", getEntries)
+	r.POST("/post", postEntries)
 
 	log.Printf("Listening on port %s", port)
 	entryPoint := fmt.Sprintf("0.0.0.0:%s", port)
