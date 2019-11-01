@@ -2,12 +2,13 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"os"
 	"fmt"
 	"time"
 	"log"
 	"net/http"
+	"github.com/gin-gonic/gin"
+
 	"cloud.google.com/go/datastore"
 )
 
@@ -22,45 +23,47 @@ type Entry struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+type Entries struct {
+	Entries []*Entry `json:"entries"`
+}
+
 func getDatastoreClient(ctx context.Context) (client *datastore.Client, err error) {
 	projectID := os.Getenv(EnvKeyDatastoreProjectId)
 	client, err = datastore.NewClient(ctx, projectID)
 	return
 }
 
-func indexHandler(w http.ResponseWriter, r *http.Request) {
+func indexHandler(gc *gin.Context) {
 	ctx := context.Background()
 
 	client, err := getDatastoreClient(ctx)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		gc.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	// 最新10件取得
 	q := datastore.NewQuery("Entry").Order("-created_at").Limit(10)
-	entries := make([]Entry, 0, 10)
+	entries := make([]*Entry, 0, 10)
 	if _, err := client.GetAll(ctx, q, &entries); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		gc.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	// JSON にして返す
-	res, err := json.Marshal(entries)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.Write(res)
+
+	gc.JSON(http.StatusOK, &Entries{Entries: entries})
 }
 
 func main() {
-	http.HandleFunc("/", indexHandler)
-
 	port := os.Getenv(EnvKeyPORT)
 	if port == "" {
 		port = "8080"
 	}
+
+	r := gin.Default()
+	r.GET("/", indexHandler)
+
 	log.Printf("Listening on port %s", port)
-	log.Fatal(http.ListenAndServe(fmt.Sprintf("0.0.0.0:%s", port), nil))
+	entryPoint := fmt.Sprintf("0.0.0.0:%s", port)
+	r.Run(entryPoint)
+
 }
