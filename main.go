@@ -8,8 +8,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"cloud.google.com/go/datastore"
+	"github.com/gin-gonic/gin"
 )
 
 const (
@@ -18,9 +18,9 @@ const (
 )
 
 type Entry struct {
-	Title     string    `json:"title"`
-	Body      string    `json:"body"`
-	CreatedAt time.Time `json:"created_at"`
+	Title     string     `json:"title" binding:"required" datastore:"title,noindex"`
+	Body      string     `json:"body" binding:"required" datastore:"body,noindex"`
+	CreatedAt *time.Time `json:"created_at" datastore:"created_at"`
 }
 
 type Entries struct {
@@ -33,7 +33,7 @@ func getDatastoreClient(ctx context.Context) (client *datastore.Client, err erro
 	return
 }
 
-func postEntries(gc *gin.Context) {
+func postEntry(gc *gin.Context) {
 	ctx := context.Background()
 
 	var entry Entry
@@ -48,6 +48,10 @@ func postEntries(gc *gin.Context) {
 		return
 	}
 
+	if entry.CreatedAt == nil {
+		now := time.Now()
+		entry.CreatedAt = &now
+	}
 	key := datastore.IncompleteKey("Entry", nil)
 	if _, err := client.Put(ctx, key, &entry); err != nil {
 		gc.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -76,6 +80,10 @@ func getEntries(gc *gin.Context) {
 	gc.JSON(http.StatusOK, &Entries{Entries: entries})
 }
 
+func index(gc *gin.Context) {
+	gc.String(http.StatusOK, "try: GET /entries or POST /entries")
+}
+
 func main() {
 	port := os.Getenv(EnvKeyPORT)
 	if port == "" {
@@ -83,11 +91,11 @@ func main() {
 	}
 
 	r := gin.Default()
-	r.GET("/", getEntries)
-	r.POST("/post", postEntries)
+	r.GET("/", index)
+	r.GET("/entries", getEntries)
+	r.POST("/entries", postEntry)
 
 	log.Printf("Listening on port %s", port)
 	entryPoint := fmt.Sprintf("0.0.0.0:%s", port)
 	r.Run(entryPoint)
-
 }
